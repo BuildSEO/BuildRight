@@ -1,0 +1,66 @@
+// BuildRight — SEO Snapshot Tool
+// Data model spine. See docs/06-data-model.md for rationale + state machines.
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Project {
+  id        String     @id @default(cuid())
+  name      String
+  domain    String
+  createdAt DateTime   @default(now())
+  snapshots Snapshot[]
+}
+
+// One capture run of a whole site at a point in time.
+model Snapshot {
+  id         String    @id @default(cuid())
+  projectId  String
+  project    Project   @relation(fields: [projectId], references: [id])
+  label      String?
+  status     String    @default("queued") // queued|discovering|capturing|done|failed
+  discovery  String    @default("sitemap") // sitemap|crawl
+  maxPages   Int       @default(200)
+  totalPages Int       @default(0)
+  donePages  Int       @default(0)
+  error      String?
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+  pages      Page[]
+}
+
+// One captured URL within a snapshot.
+model Page {
+  id              String    @id @default(cuid())
+  snapshotId      String
+  snapshot        Snapshot  @relation(fields: [snapshotId], references: [id])
+  url             String
+  status          String    @default("queued") // queued|capturing|done|failed
+  httpStatus      Int?
+  title           String?
+  metaDescription String?
+  canonical       String?
+  metaRobots      String?
+  h1              String? // primary H1 (full outline stored in headings)
+  headings        String? // JSON {h1:[],h2:[],h3:[],h4:[],h5:[],h6:[]}
+  schema          String? // JSON array of JSON-LD blocks
+  links           String? // JSON [{href,anchor,internal}]
+  wordCount       Int?
+  screenshotPath  String? // relative .webp under data/archive
+  pdfPath         String? // relative .pdf under data/archive
+  htmlGzPath      String? // relative .html.gz under data/archive
+  width           Int?
+  height          Int?
+  fileSizeBytes   Int?
+  error           String?
+  capturedAt      DateTime?
+
+  @@unique([snapshotId, url])
+  @@index([snapshotId])
+}
