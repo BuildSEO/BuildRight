@@ -46,3 +46,5 @@ data/
 
 # manual capture smoke-test output
 /test.png
+/test.webp
+/test.pdf
