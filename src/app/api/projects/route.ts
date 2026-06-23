@@ -12,7 +12,10 @@ export const GET = handle(async (req) => {
   const projects = await db.project.findMany({
     where,
     orderBy: { createdAt: "desc" },
-    include: { _count: { select: { snapshots: true } } },
+    include: {
+      _count: { select: { snapshots: true } },
+      snapshots: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+    },
   });
   return ok(
     projects.map((p) => ({
@@ -21,6 +24,7 @@ export const GET = handle(async (req) => {
       domain: p.domain,
       createdAt: p.createdAt,
       snapshotCount: p._count.snapshots,
+      lastSnapshotAt: p.snapshots[0]?.createdAt ?? null,
     })),
   );
 });

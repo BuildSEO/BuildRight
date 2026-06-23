@@ -25,6 +25,27 @@ export interface ProjectSummary {
   domain: string;
   createdAt: string;
   snapshotCount: number;
+  lastSnapshotAt: string | null;
+}
+
+export interface SnapshotSummary {
+  id: string;
+  label: string | null;
+  status: Snapshot["status"];
+  discovery: Snapshot["discovery"];
+  maxPages: number;
+  totalPages: number;
+  donePages: number;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+export interface ProjectDetail {
+  id: string;
+  name: string;
+  domain: string;
+  createdAt: string;
+  snapshots: SnapshotSummary[];
 }
 
 export interface Snapshot {
@@ -75,6 +96,7 @@ export const api = {
     apiFetch(`/api/projects${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   createProject: (body: CreateProjectInput): Promise<ProjectSummary> =>
     apiFetch("/api/projects", jsonBody(body)),
+  getProject: (id: string): Promise<ProjectDetail> => apiFetch(`/api/projects/${id}`),
   createSnapshot: (projectId: string, body: Partial<CreateSnapshotInput>): Promise<Snapshot> =>
     apiFetch(`/api/projects/${projectId}/snapshots`, jsonBody(body)),
   getSnapshot: (id: string): Promise<Snapshot> => apiFetch(`/api/snapshots/${id}`),
