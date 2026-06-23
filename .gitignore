@@ -43,3 +43,6 @@ next-env.d.ts
 
 # generated data — SQLite db + screenshot/html archive (never commit)
 data/
+
+# manual capture smoke-test output
+/test.png

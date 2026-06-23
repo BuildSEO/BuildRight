@@ -11,7 +11,8 @@
     "worker": "tsx src/worker/index.ts",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "test:unit": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:int": "vitest run test/integration",
     "test:watch": "vitest",
     "verify": "npm run typecheck && npm run lint && npm run test:unit"
   },
