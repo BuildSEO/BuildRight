@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+
+# next.js build output
+.next/
+out/
+
+# generated data — SQLite db + screenshot/html archive (never commit)
+data/
+
+# env / secrets
+.env
+.env*.local
+
+# logs & os cruft
+*.log
+npm-debug.log*
+.DS_Store
+
+# editor
+.vscode/
+.idea/
