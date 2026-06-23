@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "worker": "tsx src/worker/index.ts",
+    "worker": "tsx --env-file=.env src/worker/index.ts",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "test:unit": "vitest run test/unit",
