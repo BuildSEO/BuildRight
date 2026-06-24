@@ -12,8 +12,13 @@ import { parse as parseHtml } from "node-html-parser";
 import { logger } from "@/lib/logger";
 
 export interface DiscoverOptions {
-  mode: "sitemap" | "crawl";
+  mode: "single" | "sitemap" | "crawl";
   maxPages: number;
+}
+
+export interface DiscoverHooks {
+  /** Return false to abort discovery early (e.g. the user stopped the snapshot mid-crawl). */
+  shouldContinue?: () => Promise<boolean> | boolean;
 }
 
 const USER_AGENT =
@@ -250,12 +255,17 @@ async function findSitemapEntryPoints(origin: string): Promise<string[]> {
   return [...entries];
 }
 
-async function collectSitemapUrls(origin: string, maxPages: number): Promise<string[]> {
+async function collectSitemapUrls(
+  origin: string,
+  maxPages: number,
+  hooks: DiscoverHooks = {},
+): Promise<string[]> {
   const queue = await findSitemapEntryPoints(origin);
   const seenSitemaps = new Set<string>();
   const pageUrls: string[] = [];
 
   while (queue.length > 0 && pageUrls.length < maxPages && seenSitemaps.size < MAX_SITEMAPS) {
+    if (hooks.shouldContinue && !(await hooks.shouldContinue())) break;
     const sitemapUrl = queue.shift();
     if (!sitemapUrl || seenSitemaps.has(sitemapUrl)) continue;
     seenSitemaps.add(sitemapUrl);
@@ -280,15 +290,16 @@ async function collectSitemapUrls(origin: string, maxPages: number): Promise<str
   return pageUrls;
 }
 
-async function crawl(origin: string, maxPages: number): Promise<string[]> {
+async function crawl(origin: string, maxPages: number, hooks: DiscoverHooks = {}): Promise<string[]> {
   const start = normalizeUrl(`${origin}/`, origin) ?? origin;
   const seen = new Set<string>([start]);
   const queue: string[] = [start];
   const found: string[] = [];
-  const maxFetches = Math.max(maxPages * 3, 50); // safety valve against crawl traps
+  const maxFetches = Math.max(maxPages * 5, 100); // safety valve against crawl traps
   let fetches = 0;
 
   while (queue.length > 0 && found.length < maxPages && fetches < maxFetches) {
+    if (hooks.shouldContinue && !(await hooks.shouldContinue())) break;
     const url = queue.shift();
     if (!url) continue;
     found.push(url);
@@ -320,7 +331,11 @@ async function crawl(origin: string, maxPages: number): Promise<string[]> {
  * Discover the page URLs to capture for a domain.
  * Sitemap-first; falls back to a same-origin crawl when sitemap mode yields nothing.
  */
-export async function discoverUrls(domain: string, opts: DiscoverOptions): Promise<string[]> {
+export async function discoverUrls(
+  domain: string,
+  opts: DiscoverOptions,
+  hooks: DiscoverHooks = {},
+): Promise<string[]> {
   const origin = normalizeOrigin(domain);
   const host = new URL(origin).hostname;
   if (isBlockedHost(host)) {
@@ -328,21 +343,36 @@ export async function discoverUrls(domain: string, opts: DiscoverOptions): Promi
   }
 
   const { mode, maxPages } = opts;
-  let raw: string[] = [];
 
+  // Single page: capture only the entered URL — no discovery.
+  if (mode === "single") {
+    const only = normalizeUrl(`${origin}/`, origin);
+    logger.info("discover: single page", { origin });
+    return only ? [only] : [];
+  }
+
+  let raw: string[] = [];
   if (mode === "sitemap") {
     try {
-      raw = await collectSitemapUrls(origin, maxPages);
+      raw = await collectSitemapUrls(origin, maxPages, hooks);
     } catch (e) {
       logger.warn("discover: sitemap mode failed", { origin, error: toMessage(e) });
       raw = [];
     }
     if (raw.length === 0) {
       logger.warn("discover: sitemap yielded no URLs — falling back to crawl", { origin });
-      raw = await crawl(origin, maxPages);
+      raw = await crawl(origin, maxPages, hooks);
     }
   } else {
-    raw = await crawl(origin, maxPages);
+    // Full site: union of sitemap URLs and a same-origin BFS crawl, for maximum coverage.
+    let sitemapUrls: string[] = [];
+    try {
+      sitemapUrls = await collectSitemapUrls(origin, maxPages, hooks);
+    } catch (e) {
+      logger.warn("discover: sitemap collection failed during full crawl", { origin, error: toMessage(e) });
+    }
+    const crawlUrls = await crawl(origin, maxPages, hooks);
+    raw = [...sitemapUrls, ...crawlUrls];
   }
 
   const result = finalizeUrls(raw, origin, maxPages);

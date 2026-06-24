@@ -20,7 +20,7 @@ export function NewSnapshotDialog({ projectId }: { projectId: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState("");
-  const [discovery, setDiscovery] = useState<"sitemap" | "crawl">("sitemap");
+  const [discovery, setDiscovery] = useState<"single" | "sitemap" | "crawl">("sitemap");
   const [maxPages, setMaxPages] = useState(200);
 
   const mutation = useMutation({
@@ -72,25 +72,28 @@ export function NewSnapshotDialog({ projectId }: { projectId: string }) {
               id="snapshot-discovery"
               className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-sm"
               value={discovery}
-              onChange={(e) => setDiscovery(e.target.value === "crawl" ? "crawl" : "sitemap")}
+              onChange={(e) => setDiscovery(e.target.value as "single" | "sitemap" | "crawl")}
             >
-              <option value="sitemap">Sitemap (fallback to crawl)</option>
-              <option value="crawl">Crawl</option>
+              <option value="sitemap">Whole site — sitemap (fast)</option>
+              <option value="crawl">Whole site — full crawl (most pages)</option>
+              <option value="single">Single page only (just this URL)</option>
             </select>
           </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="snapshot-maxpages">
-              Max pages
-            </label>
-            <Input
-              id="snapshot-maxpages"
-              type="number"
-              min={1}
-              max={1000}
-              value={maxPages}
-              onChange={(e) => setMaxPages(Math.max(1, Math.min(1000, Number(e.target.value) || 1)))}
-            />
-          </div>
+          {discovery !== "single" && (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="snapshot-maxpages">
+                Max pages
+              </label>
+              <Input
+                id="snapshot-maxpages"
+                type="number"
+                min={1}
+                max={1000}
+                value={maxPages}
+                onChange={(e) => setMaxPages(Math.max(1, Math.min(1000, Number(e.target.value) || 1)))}
+              />
+            </div>
+          )}
           <DialogFooter>
             <Button type="submit" disabled={mutation.isPending}>
               {mutation.isPending ? "Starting…" : "Start snapshot"}

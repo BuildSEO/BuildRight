@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, RefreshCw, Trash2 } from "lucide-react";
 import { api, type PageRow } from "@/lib/api";
 import {
   Table,
@@ -105,6 +105,7 @@ export default function SnapshotPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [linksSheet, setLinksSheet] = useState<LinksSheetState>({ open: false, url: "", links: [] });
 
   const snapshotQuery = useQuery({
@@ -120,6 +121,11 @@ export default function SnapshotPage() {
   const status = snapshotQuery.data?.status;
   const isLive =
     status !== undefined && status !== "done" && status !== "failed" && status !== "stopped";
+
+  const refreshAfterChange = () => {
+    void queryClient.invalidateQueries({ queryKey: ["snapshot", snapshotId] });
+    void queryClient.invalidateQueries({ queryKey: ["snapshot-pages", snapshotId] });
+  };
 
   const stopMutation = useMutation({
     mutationFn: () => api.stopSnapshot(snapshotId),
@@ -141,6 +147,25 @@ export default function SnapshotPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete"),
   });
 
+  const recaptureMutation = useMutation({
+    mutationFn: (pageIds: string[]) => api.recapturePages(snapshotId, pageIds),
+    onSuccess: (r) => {
+      toast.success(`Re-fetching ${r.requeued} page${r.requeued === 1 ? "" : "s"}…`);
+      setSelected(new Set());
+      refreshAfterChange();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to re-fetch"),
+  });
+
+  const deletePageMutation = useMutation({
+    mutationFn: (pageId: string) => api.deletePage(pageId),
+    onSuccess: () => {
+      toast.success("Page deleted");
+      refreshAfterChange();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete page"),
+  });
+
   const pagesQuery = useQuery({
     queryKey: ["snapshot-pages", snapshotId, search],
     queryFn: () => api.listPages(snapshotId, { search: search || undefined, take: 200 }),
@@ -151,8 +176,16 @@ export default function SnapshotPage() {
   // One final refresh when the run finishes, so the last captured rows show up.
   const refetchPages = pagesQuery.refetch;
   useEffect(() => {
-    if (status === "done" || status === "failed") void refetchPages();
+    if (status === "done" || status === "failed" || status === "stopped") void refetchPages();
   }, [status, refetchPages]);
+
+  const toggleSelect = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const snapshot = snapshotQuery.data;
   const pages = pagesQuery.data?.pages ?? [];
@@ -177,21 +210,23 @@ export default function SnapshotPage() {
         <p className="text-sm text-red-600">Snapshot not found</p>
       ) : (
         <>
-          <div className="mb-2 flex items-center justify-between gap-4">
+          <div className="mb-3 flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <h1 className="truncate text-2xl font-semibold">
-                {snapshot.project?.domain ?? "Snapshot"}
-              </h1>
+              <div className="mb-1 flex items-center gap-2">
+                <h1 className="truncate text-2xl font-semibold tracking-tight">
+                  {snapshot.project?.domain ?? "Snapshot"}
+                </h1>
+                <StatusBadge status={snapshot.status} />
+              </div>
               <p className="text-muted-foreground text-sm">{snapshot.label ?? "Untitled snapshot"}</p>
             </div>
-            <div className="flex items-center gap-2">
-              <StatusBadge status={snapshot.status} />
+            <div className="flex shrink-0 items-center gap-2">
               {isLive && (
                 <Button variant="outline" onClick={() => stopMutation.mutate()} disabled={stopMutation.isPending}>
                   {stopMutation.isPending ? "Stopping…" : "Stop"}
                 </Button>
               )}
-              <Button variant="outline" onClick={() => toast.info("Export (zip) coming in a later phase")}>
+              <Button variant="outline" onClick={() => toast.info("Zip export is coming soon")}>
                 Export
               </Button>
               <Button
@@ -211,46 +246,66 @@ export default function SnapshotPage() {
 
           <div className="mb-6">
             <Progress value={pct} />
-            <p className="text-muted-foreground mt-1 text-sm">
+            <p className="text-muted-foreground mt-1.5 text-sm">
               {done}/{total} pages
               {snapshot.status === "queued" && " — queued; is the worker running? (npm run worker)"}
               {snapshot.status === "discovering" && " — discovering pages…"}
+              {snapshot.status === "stopped" && " — stopped"}
               {snapshot.status === "failed" && snapshot.error && ` — ${snapshot.error}`}
             </p>
           </div>
 
-          <form
-            className="mb-4 flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setSearch(searchInput.trim());
-            }}
-          >
-            <Input
-              placeholder="Filter by URL or title…"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-            />
-            <Button type="submit" variant="outline">
-              Search
-            </Button>
-          </form>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <form
+              className="flex flex-1 gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setSearch(searchInput.trim());
+              }}
+            >
+              <Input
+                placeholder="Filter by URL or title…"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+              />
+              <Button type="submit" variant="outline">
+                Search
+              </Button>
+            </form>
+            {selected.size > 0 && (
+              <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-1.5 text-sm">
+                <span className="text-muted-foreground">{selected.size} selected</span>
+                <Button
+                  size="sm"
+                  disabled={recaptureMutation.isPending}
+                  onClick={() => recaptureMutation.mutate([...selected])}
+                >
+                  <RefreshCw className="mr-1 size-3.5" />
+                  Re-fetch
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+                  Clear
+                </Button>
+              </div>
+            )}
+          </div>
 
           <div className="overflow-hidden rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8" />
                   <TableHead className="w-24">Preview</TableHead>
                   <TableHead>URL / Title</TableHead>
                   <TableHead className="w-20">Status</TableHead>
                   <TableHead className="w-28">Captured</TableHead>
-                  <TableHead className="w-10" />
+                  <TableHead className="w-32 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {pages.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center text-sm">
+                    <TableCell colSpan={6} className="text-muted-foreground py-8 text-center text-sm">
                       {isLive ? "Waiting for captures…" : "No pages."}
                     </TableCell>
                   </TableRow>
@@ -262,8 +317,16 @@ export default function SnapshotPage() {
                         key={p.id}
                         page={p}
                         expanded={expanded}
+                        selected={selected.has(p.id)}
+                        onToggleSelect={() => toggleSelect(p.id)}
                         onToggle={() => setExpandedId(expanded ? null : p.id)}
                         onViewLinks={(url, links) => setLinksSheet({ open: true, url, links })}
+                        onRefetch={() => recaptureMutation.mutate([p.id])}
+                        onDelete={() => {
+                          if (window.confirm("Delete this page and its screenshot?")) {
+                            deletePageMutation.mutate(p.id);
+                          }
+                        }}
                       />
                     );
                   })
@@ -299,24 +362,38 @@ export default function SnapshotPage() {
 function FragmentRow({
   page,
   expanded,
+  selected,
   onToggle,
+  onToggleSelect,
   onViewLinks,
+  onRefetch,
+  onDelete,
 }: {
   page: PageRow;
   expanded: boolean;
+  selected: boolean;
   onToggle: () => void;
+  onToggleSelect: () => void;
   onViewLinks: (url: string, links: LinkItem[]) => void;
+  onRefetch: () => void;
+  onDelete: () => void;
 }) {
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
   return (
     <>
       <TableRow className="cursor-pointer" onClick={onToggle}>
+        <TableCell onClick={stop}>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            className="size-4 cursor-pointer align-middle"
+            aria-label="Select page"
+          />
+        </TableCell>
         <TableCell>
           {page.screenshotPath ? (
-            <Link
-              href={`/pages/${page.id}`}
-              onClick={(e) => e.stopPropagation()}
-              className="block"
-            >
+            <Link href={`/pages/${page.id}`} onClick={stop} className="block">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={api.screenshotUrl(page.id)}
@@ -339,11 +416,29 @@ function FragmentRow({
           <HttpStatusBadge code={page.httpStatus} />
         </TableCell>
         <TableCell className="text-muted-foreground text-sm">{formatTime(page.capturedAt)}</TableCell>
-        <TableCell>{expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}</TableCell>
+        <TableCell onClick={stop} className="text-right">
+          <div className="flex items-center justify-end gap-0.5">
+            <Button variant="ghost" size="icon-sm" title="Re-fetch this page" onClick={onRefetch}>
+              <RefreshCw className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-red-600"
+              title="Delete this page"
+              onClick={onDelete}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+            <Button variant="ghost" size="icon-sm" title="Toggle details" onClick={onToggle}>
+              {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+            </Button>
+          </div>
+        </TableCell>
       </TableRow>
       {expanded && (
         <TableRow>
-          <TableCell colSpan={5} className="p-0">
+          <TableCell colSpan={6} className="p-0">
             <PageExpand pageId={page.id} onViewLinks={onViewLinks} />
           </TableCell>
         </TableRow>

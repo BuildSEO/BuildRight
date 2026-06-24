@@ -70,9 +70,16 @@ export async function runSnapshot(snapshot: SnapshotWithProject, activeBrowser: 
   try {
     const existing = await db.page.count({ where: { snapshotId: snapshot.id } });
     if (existing === 0) {
-      const mode = snapshot.discovery === "crawl" ? "crawl" : "sitemap";
+      const mode = (["single", "sitemap", "crawl"].includes(snapshot.discovery)
+        ? snapshot.discovery
+        : "sitemap") as "single" | "sitemap" | "crawl";
       logger.info("worker: discovering", { snapshotId: snapshot.id, domain: snapshot.project.domain, mode });
-      const urls = await discoverUrls(snapshot.project.domain, { mode, maxPages: snapshot.maxPages });
+      const urls = await discoverUrls(
+        snapshot.project.domain,
+        { mode, maxPages: snapshot.maxPages },
+        // stop discovery promptly if the user stops the snapshot mid-crawl
+        { shouldContinue: async () => (await snapshotStatus(snapshot.id)) === "discovering" },
+      );
       if (urls.length === 0) throw new Error("no URLs discovered");
       await db.page.createMany({ data: urls.map((url) => ({ snapshotId: snapshot.id, url })) });
     } else {

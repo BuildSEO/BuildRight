@@ -91,3 +91,11 @@ export async function removeArchiveDir(absDir: string): Promise<void> {
   if (!abs.startsWith(root)) return;
   await rm(abs, { recursive: true, force: true });
 }
+
+/** Remove a single archive file by its DB-stored relative path (guarded inside ARCHIVE_DIR). */
+export async function removeArchiveFileByRelative(relPath: string): Promise<void> {
+  const abs = path.resolve(fromArchiveRelative(relPath));
+  const root = path.resolve(ARCHIVE_DIR) + path.sep;
+  if (!abs.startsWith(root)) return;
+  await rm(abs, { force: true }).catch(() => undefined);
+}
