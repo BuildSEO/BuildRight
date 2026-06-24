@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useParams, useRouter } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import {
   Table,
@@ -14,7 +15,7 @@ import {
 } from "@/components/ui/table";
 import { StatusBadge } from "@/components/status-badge";
 import { NewSnapshotDialog } from "@/components/new-snapshot-dialog";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 
 function formatDateTime(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : "—";
@@ -23,11 +24,23 @@ function formatDateTime(iso: string | null): string {
 export default function ProjectPage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
+  const router = useRouter();
+  const queryClient = useQueryClient();
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["project", projectId],
     queryFn: () => api.getProject(projectId),
     enabled: Boolean(projectId),
+  });
+
+  const deleteProject = useMutation({
+    mutationFn: () => api.deleteProject(projectId),
+    onSuccess: () => {
+      toast.success("Project deleted");
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      router.push("/");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete project"),
   });
 
   return (
@@ -57,6 +70,22 @@ export default function ProjectPage() {
                 Compare
               </Link>
               <NewSnapshotDialog projectId={data.id} />
+              <Button
+                variant="outline"
+                className="text-red-600"
+                disabled={deleteProject.isPending}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      "Delete this project, all its snapshots, and all screenshots? This cannot be undone.",
+                    )
+                  ) {
+                    deleteProject.mutate();
+                  }
+                }}
+              >
+                Delete
+              </Button>
             </div>
           </div>
 

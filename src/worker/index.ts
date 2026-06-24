@@ -58,6 +58,12 @@ async function claimNextSnapshot(): Promise<SnapshotWithProject | null> {
   return db.snapshot.findUnique({ where: { id: next.id }, include: { project: true } });
 }
 
+/** True if the snapshot has been stopped by the user (status set to "stopped" via the API). */
+async function isStopped(snapshotId: string): Promise<boolean> {
+  const s = await db.snapshot.findUnique({ where: { id: snapshotId }, select: { status: true } });
+  return s?.status === "stopped";
+}
+
 /** Run one snapshot end-to-end. Discovery runs only if the snapshot has no pages yet (resume-safe). */
 export async function runSnapshot(snapshot: SnapshotWithProject, activeBrowser: Browser): Promise<void> {
   try {
@@ -70,6 +76,11 @@ export async function runSnapshot(snapshot: SnapshotWithProject, activeBrowser: 
       await db.page.createMany({ data: urls.map((url) => ({ snapshotId: snapshot.id, url })) });
     } else {
       logger.info("worker: resuming snapshot with existing pages", { snapshotId: snapshot.id, existing });
+    }
+
+    if (await isStopped(snapshot.id)) {
+      logger.info("worker: snapshot stopped before capture", { snapshotId: snapshot.id });
+      return;
     }
 
     const total = await db.page.count({ where: { snapshotId: snapshot.id } });
@@ -93,6 +104,7 @@ export async function runSnapshot(snapshot: SnapshotWithProject, activeBrowser: 
     for (const pageRow of queued) {
       if (shuttingDown) break;
       void queue.add(async () => {
+        if (await isStopped(snapshot.id)) return; // user stopped the run; skip remaining pages
         await captureOnePage(activeBrowser, pageRow, snapshot.projectId);
         await db.snapshot.update({ where: { id: snapshot.id }, data: { donePages: { increment: 1 } } });
       });
@@ -101,6 +113,10 @@ export async function runSnapshot(snapshot: SnapshotWithProject, activeBrowser: 
 
     if (shuttingDown) {
       logger.info("worker: shutting down mid-capture — snapshot left for resume", { snapshotId: snapshot.id });
+      return;
+    }
+    if (await isStopped(snapshot.id)) {
+      logger.info("worker: snapshot stopped by user", { snapshotId: snapshot.id });
       return;
     }
 

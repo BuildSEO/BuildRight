@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useParams, useRouter } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { api, type PageRow } from "@/lib/api";
@@ -99,6 +99,8 @@ function PageExpand({
 export default function SnapshotPage() {
   const params = useParams<{ id: string }>();
   const snapshotId = params.id;
+  const router = useRouter();
+  const queryClient = useQueryClient();
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -111,12 +113,33 @@ export default function SnapshotPage() {
     enabled: Boolean(snapshotId),
     refetchInterval: (q) => {
       const s = q.state.data?.status;
-      return s === "done" || s === "failed" ? false : 2000;
+      return s === "done" || s === "failed" || s === "stopped" ? false : 2000;
     },
   });
 
   const status = snapshotQuery.data?.status;
-  const isLive = status !== undefined && status !== "done" && status !== "failed";
+  const isLive =
+    status !== undefined && status !== "done" && status !== "failed" && status !== "stopped";
+
+  const stopMutation = useMutation({
+    mutationFn: () => api.stopSnapshot(snapshotId),
+    onSuccess: () => {
+      toast.success("Snapshot stopped");
+      void snapshotQuery.refetch();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to stop"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.deleteSnapshot(snapshotId),
+    onSuccess: () => {
+      toast.success("Snapshot deleted");
+      const projectId = snapshotQuery.data?.project?.id;
+      if (projectId) void queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      router.push(projectId ? `/projects/${projectId}` : "/");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete"),
+  });
 
   const pagesQuery = useQuery({
     queryKey: ["snapshot-pages", snapshotId, search],
@@ -163,8 +186,25 @@ export default function SnapshotPage() {
             </div>
             <div className="flex items-center gap-2">
               <StatusBadge status={snapshot.status} />
+              {isLive && (
+                <Button variant="outline" onClick={() => stopMutation.mutate()} disabled={stopMutation.isPending}>
+                  {stopMutation.isPending ? "Stopping…" : "Stop"}
+                </Button>
+              )}
               <Button variant="outline" onClick={() => toast.info("Export (zip) coming in a later phase")}>
                 Export
+              </Button>
+              <Button
+                variant="outline"
+                className="text-red-600"
+                disabled={deleteMutation.isPending}
+                onClick={() => {
+                  if (window.confirm("Delete this snapshot and its screenshots? This cannot be undone.")) {
+                    deleteMutation.mutate();
+                  }
+                }}
+              >
+                Delete
               </Button>
             </div>
           </div>

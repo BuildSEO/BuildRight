@@ -3,7 +3,7 @@
  * thrown errors into the right HTTP response, and a traversal-guarded archive file server.
  */
 
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { ZodError } from "zod";
 import { logger } from "@/lib/logger";
@@ -82,4 +82,12 @@ export async function serveArchiveFile(relPath: string, contentType: string): Pr
       "cache-control": "private, max-age=86400, immutable",
     },
   });
+}
+
+/** Recursively remove an archive directory, but only if it resolves inside ARCHIVE_DIR. */
+export async function removeArchiveDir(absDir: string): Promise<void> {
+  const abs = path.resolve(absDir);
+  const root = path.resolve(ARCHIVE_DIR) + path.sep;
+  if (!abs.startsWith(root)) return;
+  await rm(abs, { recursive: true, force: true });
 }

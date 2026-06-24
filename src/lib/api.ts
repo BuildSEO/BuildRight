@@ -53,7 +53,7 @@ export interface Snapshot {
   id: string;
   projectId: string;
   label: string | null;
-  status: "queued" | "discovering" | "capturing" | "done" | "failed";
+  status: "queued" | "discovering" | "capturing" | "done" | "failed" | "stopped";
   discovery: "sitemap" | "crawl";
   maxPages: number;
   totalPages: number;
@@ -115,6 +115,12 @@ export const api = {
   getPage: (id: string): Promise<PageDetail> => apiFetch(`/api/pages/${id}`),
   compareSnapshots: (from: string, to: string): Promise<CompareResult> =>
     apiFetch(`/api/snapshots/compare?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+  stopSnapshot: (id: string): Promise<Snapshot> =>
+    apiFetch(`/api/snapshots/${id}/stop`, { method: "POST" }),
+  deleteSnapshot: (id: string): Promise<{ deleted: string }> =>
+    apiFetch(`/api/snapshots/${id}`, { method: "DELETE" }),
+  deleteProject: (id: string): Promise<{ deleted: string }> =>
+    apiFetch(`/api/projects/${id}`, { method: "DELETE" }),
   screenshotUrl: (id: string): string => `/api/pages/${id}/screenshot`,
   pdfUrl: (id: string): string => `/api/pages/${id}/pdf`,
 };

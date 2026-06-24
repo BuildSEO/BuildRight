@@ -55,3 +55,13 @@ export function toArchiveRelative(absPath: string): string {
 export function fromArchiveRelative(relPath: string): string {
   return path.join(ARCHIVE_DIR, relPath);
 }
+
+/** Archive directory for a whole project (NOT created — used for deletion). */
+export function projectArchiveDir(projectId: string): string {
+  return path.join(ARCHIVE_DIR, projectId);
+}
+
+/** Archive directory for one snapshot (NOT created — used for deletion). */
+export function snapshotArchiveDir(projectId: string, snapshotId: string): string {
+  return path.join(ARCHIVE_DIR, projectId, snapshotId);
+}
