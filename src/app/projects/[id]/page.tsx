@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { StatusBadge } from "@/components/status-badge";
 import { NewSnapshotDialog } from "@/components/new-snapshot-dialog";
+import { buttonVariants } from "@/components/ui/button";
 
 function formatDateTime(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : "—";
@@ -48,7 +49,15 @@ export default function ProjectPage() {
               <h1 className="text-2xl font-semibold">{data.name}</h1>
               <p className="text-muted-foreground text-sm">{data.domain}</p>
             </div>
-            <NewSnapshotDialog projectId={data.id} />
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/projects/${data.id}/compare`}
+                className={buttonVariants({ variant: "outline" })}
+              >
+                Compare
+              </Link>
+              <NewSnapshotDialog projectId={data.id} />
+            </div>
           </div>
 
           {data.snapshots.length === 0 ? (

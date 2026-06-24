@@ -5,6 +5,7 @@
 
 import type { CreateProjectInput } from "@/lib/validation/projects";
 import type { CreateSnapshotInput } from "@/lib/validation/snapshots";
+import type { CompareResult } from "@/lib/compare";
 
 type Envelope<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string; details?: unknown } };
 
@@ -112,6 +113,8 @@ export const api = {
     return apiFetch(`/api/snapshots/${snapshotId}/pages${suffix}`);
   },
   getPage: (id: string): Promise<PageDetail> => apiFetch(`/api/pages/${id}`),
+  compareSnapshots: (from: string, to: string): Promise<CompareResult> =>
+    apiFetch(`/api/snapshots/compare?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
   screenshotUrl: (id: string): string => `/api/pages/${id}/screenshot`,
   pdfUrl: (id: string): string => `/api/pages/${id}/pdf`,
 };
