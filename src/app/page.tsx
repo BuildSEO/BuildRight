@@ -13,7 +13,7 @@ function formatDate(iso: string | null): string {
 function ProjectCard({ project }: { project: ProjectSummary }) {
   return (
     <Link href={`/projects/${project.id}`} className="block">
-      <Card className="transition-colors hover:border-foreground/20">
+      <Card className="h-full shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
         <CardHeader>
           <CardTitle className="truncate">{project.name}</CardTitle>
           <p className="text-muted-foreground truncate text-sm">{project.domain}</p>

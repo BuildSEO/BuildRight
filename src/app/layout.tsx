@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { WorkerStatus } from "@/components/worker-status";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,6 +29,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="bg-background text-foreground min-h-full">
@@ -35,13 +37,16 @@ export default function RootLayout({
           <header className="bg-background/80 sticky top-0 z-40 border-b backdrop-blur">
             <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-6">
               <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-                <span className="bg-foreground text-background inline-flex size-6 items-center justify-center rounded-md text-xs font-bold">
+                <span className="bg-primary text-primary-foreground inline-flex size-6 items-center justify-center rounded-md text-xs font-bold">
                   B
                 </span>
                 BuildRight
               </Link>
               <span className="text-muted-foreground hidden text-sm sm:inline">SEO Snapshot Tool</span>
-              <WorkerStatus />
+              <div className="ml-auto flex items-center gap-2">
+                <WorkerStatus />
+                <ThemeToggle />
+              </div>
             </div>
           </header>
           {children}

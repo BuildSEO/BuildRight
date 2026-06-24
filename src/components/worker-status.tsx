@@ -13,7 +13,7 @@ export function WorkerStatus() {
 
   if (!data || data.workerAlive) return null;
   return (
-    <span className="ml-auto rounded-md bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+    <span className="rounded-md bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-400">
       ⚠ Worker not running — start it with{" "}
       <code className="font-mono">npm run worker</code>
     </span>
