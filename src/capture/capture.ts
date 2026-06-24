@@ -38,7 +38,7 @@ const SETTLE_MS = 2_500; // extra wait after the domcontentloaded fallback
 const MAX_PAGE_HEIGHT_PX = 25_000; // lazy-load scroll cap (clips infinite-scroll pages)
 const SCROLL_STEP_PX = 800;
 const SCROLL_DELAY_MS = 100;
-const IMAGE_WAIT_CEILING_MS = 5_000;
+const IMAGE_WAIT_CEILING_MS = 8_000;
 const NEUTRALIZE_STICKY = false; // toggle: flatten position:fixed/sticky before the shot
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) " +
@@ -147,11 +147,25 @@ export async function capturePage(context: BrowserContext, url: string): Promise
     // 2b. Wait out a bot-challenge interstitial (e.g. Cloudflare) so we capture the real page.
     await waitForChallengeToClear(page, url);
 
-    // 3. Hide cookie/consent overlays and undo any scroll-lock they impose.
+    // 3. Hide cookie overlays, unlock scroll, freeze animations, and reveal scroll-animated content
+    //    so nothing is captured mid-transition or stuck at opacity:0.
     await page.addStyleTag({
       content:
         `${COOKIE_OVERLAY_SELECTORS.join(",")} { display: none !important; }\n` +
-        `html, body { overflow: auto !important; }`,
+        `html, body { overflow: auto !important; }\n` +
+        `*, *::before, *::after { animation-duration: 0.001s !important; animation-delay: 0s !important; transition: none !important; }\n` +
+        `[data-aos], .aos-init, .wow, .reveal, .scroll-reveal, .animate-in, .has-reveal, [data-animate] { opacity: 1 !important; transform: none !important; visibility: visible !important; }`,
+    });
+
+    // 3b. Force lazy images to load (native loading=lazy + common data-src/data-srcset patterns).
+    await page.evaluate(() => {
+      for (const img of Array.from(document.querySelectorAll("img"))) {
+        img.loading = "eager";
+        const dataSrc = img.getAttribute("data-src");
+        if (dataSrc && !img.getAttribute("src")) img.setAttribute("src", dataSrc);
+        const dataSrcset = img.getAttribute("data-srcset");
+        if (dataSrcset && !img.getAttribute("srcset")) img.setAttribute("srcset", dataSrcset);
+      }
     });
 
     // 4. Trigger lazy-loading by scrolling top→bottom in steps, capped at MAX_PAGE_HEIGHT_PX.
@@ -189,6 +203,9 @@ export async function capturePage(context: BrowserContext, url: string): Promise
     if (capped) {
       logger.warn("capture: page-height cap hit — capture clipped", { url, maxHeight: MAX_PAGE_HEIGHT_PX });
     }
+
+    // 4b. Let images/backgrounds requested during the scroll actually finish downloading.
+    await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => undefined);
 
     // 5. Wait for fonts + images (bounded), so the shot isn't missing glyphs/images.
     try {
