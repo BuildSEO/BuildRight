@@ -219,7 +219,9 @@ export default function SnapshotPage() {
                 </h1>
                 <StatusBadge status={snapshot.status} />
               </div>
-              <p className="text-muted-foreground text-sm">{snapshot.label ?? "Untitled snapshot"}</p>
+              <p className="text-muted-foreground text-sm">
+                {snapshot.label ?? "Untitled snapshot"} · {snapshot.viewport} · {snapshot.discovery}
+              </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {isLive && (

@@ -13,6 +13,7 @@ export const GET = handle<{ id: string }>(async (_req, { params }) => {
     ...page,
     headings: parseJsonColumn(page.headings),
     schema: parseJsonColumn(page.schema),
+    seoMeta: parseJsonColumn(page.seoMeta),
     links: parseJsonColumn(page.links),
   });
 });

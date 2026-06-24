@@ -55,6 +55,7 @@ export interface Snapshot {
   label: string | null;
   status: "queued" | "discovering" | "capturing" | "done" | "failed" | "stopped";
   discovery: "single" | "sitemap" | "crawl";
+  viewport: "desktop" | "mobile";
   maxPages: number;
   totalPages: number;
   donePages: number;
@@ -82,12 +83,23 @@ export interface PageRow {
   capturedAt: string | null;
 }
 
+export interface SeoMeta {
+  openGraph: { title: string | null; description: string | null; image: string | null; type: string | null };
+  twitter: { card: string | null; title: string | null; image: string | null };
+  hreflang: { lang: string; href: string }[];
+  viewport: string | null;
+  images: { total: number; withoutAlt: number };
+  xRobotsTag: string | null;
+}
+
 export interface PageDetail extends PageRow {
   snapshotId: string;
+  finalUrl: string | null;
   canonical: string | null;
   metaRobots: string | null;
   headings: Record<string, string[]> | null;
   schema: unknown[] | null;
+  seoMeta: SeoMeta | null;
   links: { href: string; anchor: string; internal: boolean }[] | null;
   htmlGzPath: string | null;
 }

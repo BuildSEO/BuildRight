@@ -91,6 +91,12 @@ export default function PageViewer() {
         </div>
       </div>
 
+      {data.finalUrl && data.finalUrl !== data.url && (
+        <p className="text-muted-foreground mb-4 text-xs">
+          Redirected to <span className="font-mono">{data.finalUrl}</span>
+        </p>
+      )}
+
       {/* Metadata row */}
       <dl className="bg-muted/30 mb-6 grid grid-cols-2 gap-4 rounded-lg border p-4 sm:grid-cols-4">
         <Meta label="Dimensions">
@@ -130,6 +136,27 @@ export default function PageViewer() {
               <Meta label="Word count">{data.wordCount ?? "—"}</Meta>
             </dl>
           </section>
+
+          {data.seoMeta && (
+            <section>
+              <h2 className="mb-1 font-medium">Social &amp; meta</h2>
+              <dl className="space-y-1.5">
+                <Meta label="Viewport">{data.seoMeta.viewport ?? "—"}</Meta>
+                <Meta label="X-Robots-Tag">{data.seoMeta.xRobotsTag ?? "—"}</Meta>
+                <Meta label="OG title">{data.seoMeta.openGraph.title ?? "—"}</Meta>
+                <Meta label="OG image">{data.seoMeta.openGraph.image ?? "—"}</Meta>
+                <Meta label="Twitter card">{data.seoMeta.twitter.card ?? "—"}</Meta>
+                <Meta label="hreflang">
+                  {data.seoMeta.hreflang.length > 0
+                    ? data.seoMeta.hreflang.map((h) => h.lang).join(", ")
+                    : "—"}
+                </Meta>
+                <Meta label="Images missing alt">
+                  {data.seoMeta.images.withoutAlt} / {data.seoMeta.images.total}
+                </Meta>
+              </dl>
+            </section>
+          )}
 
           <section>
             <h2 className="mb-1 font-medium">Headings</h2>

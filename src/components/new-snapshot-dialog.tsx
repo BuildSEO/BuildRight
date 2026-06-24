@@ -21,6 +21,7 @@ export function NewSnapshotDialog({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState("");
   const [discovery, setDiscovery] = useState<"single" | "sitemap" | "crawl">("sitemap");
+  const [viewport, setViewport] = useState<"desktop" | "mobile">("desktop");
   const [maxPages, setMaxPages] = useState(200);
 
   const mutation = useMutation({
@@ -28,6 +29,7 @@ export function NewSnapshotDialog({ projectId }: { projectId: string }) {
       api.createSnapshot(projectId, {
         label: label.trim() || undefined,
         discovery,
+        viewport,
         maxPages,
       }),
     onSuccess: (snapshot) => {
@@ -77,6 +79,21 @@ export function NewSnapshotDialog({ projectId }: { projectId: string }) {
               <option value="sitemap">Whole site — sitemap (fast)</option>
               <option value="crawl">Whole site — full crawl (most pages)</option>
               <option value="single">Single page only (just this URL)</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" htmlFor="snapshot-viewport">
+              Device
+            </label>
+            <select
+              id="snapshot-viewport"
+              className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-sm"
+              value={viewport}
+              onChange={(e) => setViewport(e.target.value === "mobile" ? "mobile" : "desktop")}
+            >
+              <option value="desktop">Desktop (1440px)</option>
+              <option value="mobile">Mobile (iPhone)</option>
             </select>
           </div>
           {discovery !== "single" && (

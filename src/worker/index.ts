@@ -125,7 +125,8 @@ export async function runSnapshot(snapshot: SnapshotWithProject, activeBrowser: 
     });
 
     // One context per snapshot: a bot-challenge clearance cookie is solved once, then shared.
-    const context = await createCaptureContext(activeBrowser);
+    const viewport = snapshot.viewport === "mobile" ? "mobile" : "desktop";
+    const context = await createCaptureContext(activeBrowser, viewport);
     try {
       const queue = new PQueue({ concurrency: CAPTURE_CONCURRENCY });
       for (const pageRow of queued) {

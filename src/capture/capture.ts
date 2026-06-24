@@ -20,10 +20,19 @@ export interface ExtractedSeo {
   schema: unknown[]; // parsed JSON-LD blocks
   links: { href: string; anchor: string; internal: boolean }[];
   wordCount: number;
+  meta: {
+    openGraph: { title: string | null; description: string | null; image: string | null; type: string | null };
+    twitter: { card: string | null; title: string | null; image: string | null };
+    hreflang: { lang: string; href: string }[];
+    viewport: string | null;
+    images: { total: number; withoutAlt: number };
+  };
 }
 
 export interface CaptureResult {
-  httpStatus: number | null;
+  httpStatus: number | null; // FINAL main-response status (after redirects/challenge)
+  finalUrl: string; // where the page actually resolved
+  xRobotsTag: string | null; // X-Robots-Tag response header
   pngBuffer: Buffer;
   width: number;
   height: number;
@@ -62,7 +71,24 @@ const CHALLENGE_WAIT_MS = 25_000;
  * snapshot's pages means a bot-challenge clearance cookie (e.g. Cloudflare cf_clearance) is
  * solved once on the first page, not re-challenged on every page.
  */
-export async function createCaptureContext(browser: Browser): Promise<BrowserContext> {
+const MOBILE_USER_AGENT =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) " +
+  "Version/17.0 Mobile/15E148 Safari/604.1 BuildRight-SEO-Snapshot/0.1";
+
+export async function createCaptureContext(
+  browser: Browser,
+  viewport: "desktop" | "mobile" = "desktop",
+): Promise<BrowserContext> {
+  if (viewport === "mobile") {
+    return browser.newContext({
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 3,
+      isMobile: true,
+      hasTouch: true,
+      userAgent: MOBILE_USER_AGENT,
+      locale: "en-US",
+    });
+  }
   return browser.newContext({
     viewport: { width: VIEWPORT_WIDTH, height: 900 },
     deviceScaleFactor: DEVICE_SCALE_FACTOR,
@@ -115,6 +141,18 @@ export async function capturePage(context: BrowserContext, url: string): Promise
       content: "globalThis.__name = globalThis.__name || (function (fn) { return fn; });",
     });
 
+    // Track the FINAL main-frame navigation response (after challenge reloads / redirects) and
+    // the X-Robots-Tag header — the first goto's status would be the interstitial's, not the page's.
+    let mainStatus: number | null = null;
+    let xRobotsTag: string | null = null;
+    page.on("response", (res) => {
+      if (res.request().isNavigationRequest() && res.frame() === page.mainFrame()) {
+        mainStatus = res.status();
+        const xr = res.headers()["x-robots-tag"];
+        if (xr) xRobotsTag = xr;
+      }
+    });
+
     // 2. Navigate. Prefer networkidle; fall back to domcontentloaded + a settle delay.
     let httpStatus: number | null = null;
     try {
@@ -132,6 +170,10 @@ export async function capturePage(context: BrowserContext, url: string): Promise
 
     // 2b. Wait out a bot-challenge interstitial (e.g. Cloudflare) so we capture the real page.
     await waitForChallengeToClear(page, url);
+
+    // The real page's final status + URL (the response listener saw the post-challenge navigation).
+    const finalUrl = page.url();
+    if (mainStatus !== null) httpStatus = mainStatus;
 
     // 3. Hide cookie overlays, unlock scroll, freeze animations, and reveal scroll-animated content
     //    so nothing is captured mid-transition or stuck at opacity:0.
@@ -271,6 +313,30 @@ export async function capturePage(context: BrowserContext, url: string): Promise
       const bodyText = document.body?.innerText ?? "";
       const wordCount = bodyText.split(/\s+/).filter((w) => w.length > 0).length;
 
+      const imgEls = Array.from(document.querySelectorAll("img"));
+      const meta: ExtractedSeo["meta"] = {
+        openGraph: {
+          title: attrOf('meta[property="og:title"]', "content"),
+          description: attrOf('meta[property="og:description"]', "content"),
+          image: attrOf('meta[property="og:image"]', "content"),
+          type: attrOf('meta[property="og:type"]', "content"),
+        },
+        twitter: {
+          card: attrOf('meta[name="twitter:card"]', "content"),
+          title: attrOf('meta[name="twitter:title"]', "content"),
+          image: attrOf('meta[name="twitter:image"]', "content"),
+        },
+        hreflang: Array.from(document.querySelectorAll('link[rel="alternate"][hreflang]')).map((l) => ({
+          lang: l.getAttribute("hreflang") ?? "",
+          href: (l as HTMLLinkElement).href,
+        })),
+        viewport: attrOf('meta[name="viewport"]', "content"),
+        images: {
+          total: imgEls.length,
+          withoutAlt: imgEls.filter((i) => !(i.getAttribute("alt") ?? "").trim()).length,
+        },
+      };
+
       const title = document.title.trim();
       return {
         title: title.length > 0 ? title : null,
@@ -282,13 +348,14 @@ export async function capturePage(context: BrowserContext, url: string): Promise
         schema,
         links,
         wordCount,
+        meta,
       };
     });
 
     // 9. Raw HTML.
     const html = await page.content();
 
-    return { httpStatus, pngBuffer, width, height, html, extracted };
+    return { httpStatus, finalUrl, xRobotsTag, pngBuffer, width, height, html, extracted };
   } catch (e) {
     throw new Error(`capturePage failed for ${url}: ${toMessage(e)}`);
   } finally {

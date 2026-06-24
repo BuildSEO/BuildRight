@@ -24,8 +24,9 @@ model Snapshot {
   projectId  String
   project    Project   @relation(fields: [projectId], references: [id])
   label      String?
-  status     String    @default("queued") // queued|discovering|capturing|done|failed
-  discovery  String    @default("sitemap") // sitemap|crawl
+  status     String    @default("queued") // queued|discovering|capturing|done|failed|stopped
+  discovery  String    @default("sitemap") // single|sitemap|crawl
+  viewport   String    @default("desktop") // desktop|mobile
   maxPages   Int       @default(200)
   totalPages Int       @default(0)
   donePages  Int       @default(0)
@@ -41,8 +42,9 @@ model Page {
   snapshotId      String
   snapshot        Snapshot  @relation(fields: [snapshotId], references: [id])
   url             String
+  finalUrl        String? // where the page actually resolved after redirects/challenge
   status          String    @default("queued") // queued|capturing|done|failed
-  httpStatus      Int?
+  httpStatus      Int? // final main-response status (not the challenge interstitial)
   title           String?
   metaDescription String?
   canonical       String?
@@ -50,6 +52,7 @@ model Page {
   h1              String? // primary H1 (full outline stored in headings)
   headings        String? // JSON {h1:[],h2:[],h3:[],h4:[],h5:[],h6:[]}
   schema          String? // JSON array of JSON-LD blocks
+  seoMeta         String? // JSON: { openGraph, twitter, hreflang[], viewport, images, xRobotsTag }
   links           String? // JSON [{href,anchor,internal}]
   wordCount       Int?
   screenshotPath  String? // relative .webp under data/archive

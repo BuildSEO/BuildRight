@@ -101,6 +101,7 @@ export async function captureOnePage(
       data: {
         status: "done",
         httpStatus: cap.httpStatus,
+        finalUrl: cap.finalUrl,
         title: cap.extracted.title,
         metaDescription: cap.extracted.metaDescription,
         canonical: cap.extracted.canonical,
@@ -108,6 +109,7 @@ export async function captureOnePage(
         h1: cap.extracted.h1,
         headings: JSON.stringify(cap.extracted.headings),
         schema: JSON.stringify(cap.extracted.schema),
+        seoMeta: JSON.stringify({ ...cap.extracted.meta, xRobotsTag: cap.xRobotsTag }),
         links: JSON.stringify(cap.extracted.links),
         wordCount: cap.extracted.wordCount,
         screenshotPath: toArchiveRelative(webpAbs),
