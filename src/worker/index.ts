@@ -58,10 +58,10 @@ async function claimNextSnapshot(): Promise<SnapshotWithProject | null> {
   return db.snapshot.findUnique({ where: { id: next.id }, include: { project: true } });
 }
 
-/** True if the snapshot has been stopped by the user (status set to "stopped" via the API). */
-async function isStopped(snapshotId: string): Promise<boolean> {
+/** Current snapshot status, or null if it no longer exists (e.g. deleted mid-run). */
+async function snapshotStatus(snapshotId: string): Promise<string | null> {
   const s = await db.snapshot.findUnique({ where: { id: snapshotId }, select: { status: true } });
-  return s?.status === "stopped";
+  return s?.status ?? null;
 }
 
 /** Run one snapshot end-to-end. Discovery runs only if the snapshot has no pages yet (resume-safe). */
@@ -78,8 +78,12 @@ export async function runSnapshot(snapshot: SnapshotWithProject, activeBrowser: 
       logger.info("worker: resuming snapshot with existing pages", { snapshotId: snapshot.id, existing });
     }
 
-    if (await isStopped(snapshot.id)) {
-      logger.info("worker: snapshot stopped before capture", { snapshotId: snapshot.id });
+    const preStatus = await snapshotStatus(snapshot.id);
+    if (preStatus === null || preStatus === "stopped") {
+      logger.info("worker: snapshot gone or stopped before capture", {
+        snapshotId: snapshot.id,
+        status: preStatus,
+      });
       return;
     }
 
@@ -104,9 +108,11 @@ export async function runSnapshot(snapshot: SnapshotWithProject, activeBrowser: 
     for (const pageRow of queued) {
       if (shuttingDown) break;
       void queue.add(async () => {
-        if (await isStopped(snapshot.id)) return; // user stopped the run; skip remaining pages
+        const st = await snapshotStatus(snapshot.id);
+        if (st === null || st === "stopped") return; // deleted or stopped — skip remaining pages
         await captureOnePage(activeBrowser, pageRow, snapshot.projectId);
-        await db.snapshot.update({ where: { id: snapshot.id }, data: { donePages: { increment: 1 } } });
+        // updateMany tolerates the snapshot being deleted mid-run (no-op instead of throwing).
+        await db.snapshot.updateMany({ where: { id: snapshot.id }, data: { donePages: { increment: 1 } } });
       });
     }
     await queue.onIdle();
@@ -115,12 +121,17 @@ export async function runSnapshot(snapshot: SnapshotWithProject, activeBrowser: 
       logger.info("worker: shutting down mid-capture — snapshot left for resume", { snapshotId: snapshot.id });
       return;
     }
-    if (await isStopped(snapshot.id)) {
+    const finalStatus = await snapshotStatus(snapshot.id);
+    if (finalStatus === null) {
+      logger.info("worker: snapshot deleted mid-run", { snapshotId: snapshot.id });
+      return;
+    }
+    if (finalStatus === "stopped") {
       logger.info("worker: snapshot stopped by user", { snapshotId: snapshot.id });
       return;
     }
 
-    await db.snapshot.update({
+    await db.snapshot.updateMany({
       where: { id: snapshot.id },
       data: { status: "done", finishedAt: new Date() },
     });

@@ -53,7 +53,7 @@ export async function captureOnePage(
 ): Promise<void> {
   const { exportPdf = false } = options;
   try {
-    await db.page.update({ where: { id: page.id }, data: { status: "capturing" } });
+    await db.page.updateMany({ where: { id: page.id }, data: { status: "capturing" } });
 
     const cap = await withTimeout(capturePage(browser, page.url), PER_PAGE_TIMEOUT_MS, `capture ${page.url}`);
     const webp = await toWebpUnderLimit(cap.pngBuffer);
@@ -71,7 +71,7 @@ export async function captureOnePage(
       pdfRel = toArchiveRelative(pdfAbs);
     }
 
-    await db.page.update({
+    await db.page.updateMany({
       where: { id: page.id },
       data: {
         status: "done",
@@ -103,7 +103,7 @@ export async function captureOnePage(
     const msg = toMessage(e);
     logger.error("pipeline: page failed", { url: page.url, snapshotId: page.snapshotId, error: msg });
     try {
-      await db.page.update({
+      await db.page.updateMany({
         where: { id: page.id },
         data: { status: "failed", error: msg.slice(0, 500), capturedAt: new Date() },
       });
