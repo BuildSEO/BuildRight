@@ -8,6 +8,7 @@
 
 import type { Browser, BrowserContext, Page } from "playwright";
 import { logger } from "@/lib/logger";
+import { settings } from "@/lib/settings";
 
 export interface ExtractedSeo {
   title: string | null;
@@ -30,37 +31,22 @@ export interface CaptureResult {
   extracted: ExtractedSeo;
 }
 
-// Tunables — Phase 12 moves these into a central settings file.
-const VIEWPORT_WIDTH = 1440;
-const DEVICE_SCALE_FACTOR = 1.5;
-const NAV_TIMEOUT_MS = 30_000;
+// Tunables come from the central settings file (Phase 12); re-bound here for brevity.
+const {
+  viewportWidth: VIEWPORT_WIDTH,
+  deviceScaleFactor: DEVICE_SCALE_FACTOR,
+  navTimeoutMs: NAV_TIMEOUT_MS,
+  maxPageHeightPx: MAX_PAGE_HEIGHT_PX,
+  userAgent: USER_AGENT,
+  cookieOverlaySelectors: COOKIE_OVERLAY_SELECTORS,
+} = settings.capture;
+
+// Capture-internal knobs (not user-facing).
 const SETTLE_MS = 2_500; // extra wait after the domcontentloaded fallback
-const MAX_PAGE_HEIGHT_PX = 25_000; // lazy-load scroll cap (clips infinite-scroll pages)
 const SCROLL_STEP_PX = 800;
 const SCROLL_DELAY_MS = 100;
 const IMAGE_WAIT_CEILING_MS = 8_000;
 const NEUTRALIZE_STICKY = false; // toggle: flatten position:fixed/sticky before the shot
-const USER_AGENT =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) " +
-  "Chrome/126.0.0.0 Safari/537.36 BuildRight-SEO-Snapshot/0.1";
-
-// Common cookie/consent/GDPR containers. Hidden (not clicked) — safer for archival.
-const COOKIE_OVERLAY_SELECTORS: readonly string[] = [
-  "#onetrust-banner-sdk",
-  "#onetrust-consent-sdk",
-  "#CybotCookiebotDialog",
-  "#hs-eu-cookie-confirmation",
-  ".cc-window",
-  ".cookie-consent",
-  ".cookie-banner",
-  ".cookie-notice",
-  "[class*='cookie']",
-  "[id*='cookie']",
-  "[class*='consent']",
-  "[id*='consent']",
-  "[class*='gdpr']",
-  "[id*='gdpr']",
-];
 
 function toMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);

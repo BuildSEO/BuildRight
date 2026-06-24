@@ -14,9 +14,10 @@ import { logger } from "@/lib/logger";
 import { discoverUrls } from "@/capture/discover";
 import { captureOnePage } from "@/capture/pipeline";
 import { createCaptureContext } from "@/capture/capture";
+import { settings, WORKER_HEARTBEAT_ID } from "@/lib/settings";
 
-const POLL_INTERVAL_MS = 3_000;
-const CAPTURE_CONCURRENCY = 4; // 3–4 is the local sweet spot; higher risks OOM on tall pages
+const POLL_INTERVAL_MS = settings.worker.pollIntervalMs;
+const CAPTURE_CONCURRENCY = settings.capture.concurrency; // 3–4 is the local sweet spot
 
 type SnapshotWithProject = Snapshot & { project: Project };
 
@@ -25,6 +26,17 @@ let browser: Browser | null = null;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const toMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+/** Update the single-row liveness signal so /api/health (and the UI) knows the worker is alive. */
+async function beat(): Promise<void> {
+  await db.workerHeartbeat
+    .upsert({
+      where: { id: WORKER_HEARTBEAT_ID },
+      create: { id: WORKER_HEARTBEAT_ID, lastBeatAt: new Date() },
+      update: { lastBeatAt: new Date() },
+    })
+    .catch(() => undefined);
+}
 
 async function enableWal(): Promise<void> {
   try {
@@ -124,6 +136,7 @@ export async function runSnapshot(snapshot: SnapshotWithProject, activeBrowser: 
           await captureOnePage(context, pageRow, snapshot.projectId);
           // updateMany tolerates the snapshot being deleted mid-run (no-op instead of throwing).
           await db.snapshot.updateMany({ where: { id: snapshot.id }, data: { donePages: { increment: 1 } } });
+          await beat(); // keep the heartbeat fresh during long capture runs
         });
       }
       await queue.onIdle();
@@ -172,8 +185,16 @@ async function shutdown(): Promise<void> {
 async function main(): Promise<void> {
   await enableWal();
   await resumeStuckSnapshots();
-  browser = await chromium.launch({ args: ["--disable-blink-features=AutomationControlled"] });
-  logger.info("worker: started", { pollMs: POLL_INTERVAL_MS, concurrency: CAPTURE_CONCURRENCY });
+  browser = await chromium.launch({
+    headless: settings.capture.headless,
+    args: ["--disable-blink-features=AutomationControlled"],
+  });
+  await beat();
+  logger.info("worker: started", {
+    pollMs: POLL_INTERVAL_MS,
+    concurrency: CAPTURE_CONCURRENCY,
+    headless: settings.capture.headless,
+  });
 
   const onSignal = (signal: string): void => {
     if (shuttingDown) return;
@@ -185,6 +206,7 @@ async function main(): Promise<void> {
 
   let idleLogged = false;
   while (!shuttingDown) {
+    await beat();
     const snapshot = await claimNextSnapshot();
     if (!snapshot) {
       if (!idleLogged) {

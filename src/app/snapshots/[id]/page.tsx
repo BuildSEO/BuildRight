@@ -192,6 +192,7 @@ export default function SnapshotPage() {
   const total = snapshot?.totalPages ?? 0;
   const done = snapshot?.donePages ?? 0;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const failedPages = pages.filter((p) => p.status === "failed");
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-10">
@@ -226,6 +227,15 @@ export default function SnapshotPage() {
                   {stopMutation.isPending ? "Stopping…" : "Stop"}
                 </Button>
               )}
+              {failedPages.length > 0 && (
+                <Button
+                  variant="outline"
+                  disabled={recaptureMutation.isPending}
+                  onClick={() => recaptureMutation.mutate(failedPages.map((p) => p.id))}
+                >
+                  Re-run failed ({failedPages.length})
+                </Button>
+              )}
               <Button variant="outline" onClick={() => toast.info("Zip export is coming soon")}>
                 Export
               </Button>
@@ -254,6 +264,22 @@ export default function SnapshotPage() {
               {snapshot.status === "failed" && snapshot.error && ` — ${snapshot.error}`}
             </p>
           </div>
+
+          {failedPages.length > 0 && (
+            <details className="mb-4 rounded-lg border border-red-200 bg-red-50/60 p-3 text-sm">
+              <summary className="cursor-pointer font-medium text-red-700">
+                Capture log — {failedPages.length} failed page{failedPages.length === 1 ? "" : "s"}
+              </summary>
+              <ul className="mt-2 space-y-1">
+                {failedPages.map((p) => (
+                  <li key={p.id} className="text-red-700">
+                    <span className="font-mono text-xs">{p.url}</span>
+                    {p.error ? ` — ${p.error}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
 
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <form

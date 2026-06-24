@@ -125,6 +125,8 @@ export const api = {
     apiFetch(`/api/snapshots/${snapshotId}/recapture`, jsonBody({ pageIds })),
   deletePage: (id: string): Promise<{ deleted: string }> =>
     apiFetch(`/api/pages/${id}`, { method: "DELETE" }),
+  getHealth: (): Promise<{ ok: boolean; workerAlive: boolean; lastBeatAt: string | null }> =>
+    apiFetch(`/api/health`),
   screenshotUrl: (id: string): string => `/api/pages/${id}/screenshot`,
   pdfUrl: (id: string): string => `/api/pages/${id}/pdf`,
 };

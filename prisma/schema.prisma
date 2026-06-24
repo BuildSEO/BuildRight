@@ -64,3 +64,9 @@ model Page {
   @@unique([snapshotId, url])
   @@index([snapshotId])
 }
+
+// Single-row liveness signal the worker updates each loop; /api/health reads it (Phase 12).
+model WorkerHeartbeat {
+  id         String   @id
+  lastBeatAt DateTime
+}

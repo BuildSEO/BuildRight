@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { WorkerStatus } from "@/components/worker-status";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -40,6 +41,7 @@ export default function RootLayout({
                 BuildRight
               </Link>
               <span className="text-muted-foreground hidden text-sm sm:inline">SEO Snapshot Tool</span>
+              <WorkerStatus />
             </div>
           </header>
           {children}

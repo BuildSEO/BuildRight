@@ -7,6 +7,7 @@
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import { logger } from "@/lib/logger";
+import { settings } from "@/lib/settings";
 
 // WebP's hard maximum dimension. sharp throws above this, so tall captures must be downscaled.
 const WEBP_MAX_DIM = 16383;
@@ -22,7 +23,10 @@ export interface WebpResult {
   downscaled: boolean;
 }
 
-export async function toWebpUnderLimit(png: Buffer, limitBytes = 5_000_000): Promise<WebpResult> {
+export async function toWebpUnderLimit(
+  png: Buffer,
+  limitBytes: number = settings.capture.webpMaxBytes,
+): Promise<WebpResult> {
   const meta = await sharp(png).metadata();
   const originalWidth = meta.width ?? 0;
   const originalHeight = meta.height ?? 0;

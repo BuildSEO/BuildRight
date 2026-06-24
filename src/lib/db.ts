@@ -9,7 +9,7 @@
 
 import { PrismaClient } from "@prisma/client";
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; walEnabled?: boolean };
 // ^ cast required: globalThis has no `prisma` field in its type. Localized per Phase 0.
 
 export const db = globalForPrisma.prisma ?? new PrismaClient();
@@ -18,4 +18,10 @@ export const db = globalForPrisma.prisma ?? new PrismaClient();
 // client per process is correct and avoids leaking a long-lived global.
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = db;
+}
+
+// Enable SQLite WAL for concurrent app + worker access. Idempotent + persisted in the db file.
+if (!globalForPrisma.walEnabled) {
+  globalForPrisma.walEnabled = true;
+  void db.$queryRawUnsafe("PRAGMA journal_mode=WAL;").catch(() => undefined);
 }

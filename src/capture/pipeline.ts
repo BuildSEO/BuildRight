@@ -13,8 +13,9 @@ import { logger } from "@/lib/logger";
 import { pageAssetPath, toArchiveRelative } from "@/lib/paths";
 import { capturePage } from "@/capture/capture";
 import { toWebpUnderLimit, toPdf } from "@/capture/compress";
+import { settings } from "@/lib/settings";
 
-const PER_PAGE_TIMEOUT_MS = 90_000;
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function toMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -55,7 +56,31 @@ export async function captureOnePage(
   try {
     await db.page.updateMany({ where: { id: page.id }, data: { status: "capturing" } });
 
-    const cap = await withTimeout(capturePage(context, page.url), PER_PAGE_TIMEOUT_MS, `capture ${page.url}`);
+    // Capture with retry-with-backoff for transient failures (nav timeouts, flaky network).
+    let cap: Awaited<ReturnType<typeof capturePage>> | null = null;
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt <= settings.defaults.retries; attempt += 1) {
+      try {
+        cap = await withTimeout(
+          capturePage(context, page.url),
+          settings.capture.perPageTimeoutMs,
+          `capture ${page.url}`,
+        );
+        break;
+      } catch (e) {
+        lastErr = e;
+        if (attempt < settings.defaults.retries) {
+          logger.warn("pipeline: capture failed — retrying", {
+            url: page.url,
+            attempt: attempt + 1,
+            error: toMessage(e),
+          });
+          await sleep(settings.defaults.retryBackoffMs * (attempt + 1));
+        }
+      }
+    }
+    if (!cap) throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+
     const webp = await toWebpUnderLimit(cap.pngBuffer);
     const htmlGz = gzipSync(Buffer.from(cap.html, "utf8"));
 

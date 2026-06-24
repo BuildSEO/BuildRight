@@ -1,6 +1,6 @@
 # Phase Roadmap
 
-_Status: all phases provided ✅ · last updated 2026-06-23_
+_Status: all 13 phases (0–12) implemented ✅ · last updated 2026-06-24_
 
 The build proceeds in self-contained phases. **Rule:** build → run → verify → commit, then move to the next phase. Never
 start a later phase early (Phase 0 rule). Each phase file has Goal, the exact Prompt to paste, a task breakdown, Files,
