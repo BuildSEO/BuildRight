@@ -6,7 +6,7 @@
 
 import { writeFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
-import type { Browser } from "playwright";
+import type { BrowserContext } from "playwright";
 import type { Page as PageRow } from "@prisma/client";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
@@ -46,7 +46,7 @@ export interface CaptureOnePageOptions {
  * `projectId` is needed to build the on-disk path (the Page row only carries snapshotId).
  */
 export async function captureOnePage(
-  browser: Browser,
+  context: BrowserContext,
   page: PageRow,
   projectId: string,
   options: CaptureOnePageOptions = {},
@@ -55,7 +55,7 @@ export async function captureOnePage(
   try {
     await db.page.updateMany({ where: { id: page.id }, data: { status: "capturing" } });
 
-    const cap = await withTimeout(capturePage(browser, page.url), PER_PAGE_TIMEOUT_MS, `capture ${page.url}`);
+    const cap = await withTimeout(capturePage(context, page.url), PER_PAGE_TIMEOUT_MS, `capture ${page.url}`);
     const webp = await toWebpUnderLimit(cap.pngBuffer);
     const htmlGz = gzipSync(Buffer.from(cap.html, "utf8"));
 

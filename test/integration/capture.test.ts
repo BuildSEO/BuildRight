@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createServer, type Server } from "node:http";
-import { chromium, type Browser } from "playwright";
-import { capturePage } from "@/capture/capture";
+import { chromium, type Browser, type BrowserContext } from "playwright";
+import { capturePage, createCaptureContext } from "@/capture/capture";
 
 const FIXTURE_HTML = `<!doctype html>
 <html lang="en">
@@ -26,6 +26,7 @@ const FIXTURE_HTML = `<!doctype html>
 
 let server: Server;
 let browser: Browser;
+let context: BrowserContext;
 let baseUrl: string;
 
 beforeAll(async () => {
@@ -38,16 +39,18 @@ beforeAll(async () => {
   const port = typeof addr === "object" && addr !== null ? addr.port : 0;
   baseUrl = `http://127.0.0.1:${port}/`;
   browser = await chromium.launch();
+  context = await createCaptureContext(browser);
 }, 60_000);
 
 afterAll(async () => {
+  await context?.close();
   await browser?.close();
   await new Promise<void>((resolve) => server?.close(() => resolve()));
 });
 
 describe("capturePage (integration, real Chromium + fixture server)", () => {
   it("extracts SEO fields, a screenshot, dimensions, and html", async () => {
-    const r = await capturePage(browser, baseUrl);
+    const r = await capturePage(context, baseUrl);
 
     expect(r.httpStatus).toBe(200);
     expect(r.extracted.title).toBe("BuildRight Fixture");

@@ -9,7 +9,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { chromium } from "playwright";
-import { capturePage } from "@/capture/capture";
+import { capturePage, createCaptureContext } from "@/capture/capture";
 
 async function main(): Promise<void> {
   const url = process.argv[2];
@@ -18,10 +18,11 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ args: ["--disable-blink-features=AutomationControlled"] });
+  const context = await createCaptureContext(browser);
   try {
     const started = Date.now();
-    const result = await capturePage(browser, url);
+    const result = await capturePage(context, url);
     const ms = Date.now() - started;
 
     writeFileSync("test.png", result.pngBuffer);
@@ -45,6 +46,7 @@ async function main(): Promise<void> {
     );
     console.log(`\nwrote test.png  (${ms}ms)`);
   } finally {
+    await context.close();
     await browser.close();
   }
 }

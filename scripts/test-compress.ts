@@ -6,7 +6,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { chromium } from "playwright";
-import { capturePage } from "@/capture/capture";
+import { capturePage, createCaptureContext } from "@/capture/capture";
 import { toWebpUnderLimit, toPdf } from "@/capture/compress";
 
 const mb = (n: number): string => `${(n / 1024 / 1024).toFixed(2)} MB`;
@@ -18,9 +18,10 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ args: ["--disable-blink-features=AutomationControlled"] });
+  const context = await createCaptureContext(browser);
   try {
-    const cap = await capturePage(browser, url);
+    const cap = await capturePage(context, url);
     const webp = await toWebpUnderLimit(cap.pngBuffer);
     const pdf = await toPdf(cap.pngBuffer);
 
@@ -47,6 +48,7 @@ async function main(): Promise<void> {
     );
     console.log("\nwrote test.webp + test.pdf");
   } finally {
+    await context.close();
     await browser.close();
   }
 }

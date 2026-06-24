@@ -13,6 +13,7 @@ import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { discoverUrls } from "@/capture/discover";
 import { captureOnePage } from "@/capture/pipeline";
+import { createCaptureContext } from "@/capture/capture";
 
 const POLL_INTERVAL_MS = 3_000;
 const CAPTURE_CONCURRENCY = 4; // 3–4 is the local sweet spot; higher risks OOM on tall pages
@@ -104,18 +105,24 @@ export async function runSnapshot(snapshot: SnapshotWithProject, activeBrowser: 
       concurrency: CAPTURE_CONCURRENCY,
     });
 
-    const queue = new PQueue({ concurrency: CAPTURE_CONCURRENCY });
-    for (const pageRow of queued) {
-      if (shuttingDown) break;
-      void queue.add(async () => {
-        const st = await snapshotStatus(snapshot.id);
-        if (st === null || st === "stopped") return; // deleted or stopped — skip remaining pages
-        await captureOnePage(activeBrowser, pageRow, snapshot.projectId);
-        // updateMany tolerates the snapshot being deleted mid-run (no-op instead of throwing).
-        await db.snapshot.updateMany({ where: { id: snapshot.id }, data: { donePages: { increment: 1 } } });
-      });
+    // One context per snapshot: a bot-challenge clearance cookie is solved once, then shared.
+    const context = await createCaptureContext(activeBrowser);
+    try {
+      const queue = new PQueue({ concurrency: CAPTURE_CONCURRENCY });
+      for (const pageRow of queued) {
+        if (shuttingDown) break;
+        void queue.add(async () => {
+          const st = await snapshotStatus(snapshot.id);
+          if (st === null || st === "stopped") return; // deleted or stopped — skip remaining pages
+          await captureOnePage(context, pageRow, snapshot.projectId);
+          // updateMany tolerates the snapshot being deleted mid-run (no-op instead of throwing).
+          await db.snapshot.updateMany({ where: { id: snapshot.id }, data: { donePages: { increment: 1 } } });
+        });
+      }
+      await queue.onIdle();
+    } finally {
+      await context.close().catch(() => undefined);
     }
-    await queue.onIdle();
 
     if (shuttingDown) {
       logger.info("worker: shutting down mid-capture — snapshot left for resume", { snapshotId: snapshot.id });
@@ -158,7 +165,7 @@ async function shutdown(): Promise<void> {
 async function main(): Promise<void> {
   await enableWal();
   await resumeStuckSnapshots();
-  browser = await chromium.launch();
+  browser = await chromium.launch({ args: ["--disable-blink-features=AutomationControlled"] });
   logger.info("worker: started", { pollMs: POLL_INTERVAL_MS, concurrency: CAPTURE_CONCURRENCY });
 
   const onSignal = (signal: string): void => {

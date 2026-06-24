@@ -6,7 +6,7 @@
  * a fresh context per page so cookies/state never leak between captures.
  */
 
-import type { Browser } from "playwright";
+import type { Browser, BrowserContext, Page } from "playwright";
 import { logger } from "@/lib/logger";
 
 export interface ExtractedSeo {
@@ -66,15 +66,60 @@ function toMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-export async function capturePage(browser: Browser, url: string): Promise<CaptureResult> {
-  const context = await browser.newContext({
+// Markers of a bot-challenge / "checking your browser" interstitial (Cloudflare et al).
+const CHALLENGE_MARKERS =
+  "just a moment|checking your browser|checking the site connection|robot challenge|attention required|verify you are human|needs to review the security|cf-browser-verification|ddos protection|enable javascript and cookies to continue";
+const CHALLENGE_WAIT_MS = 25_000;
+
+/**
+ * Create a configured browser context for a whole snapshot. Sharing ONE context across the
+ * snapshot's pages means a bot-challenge clearance cookie (e.g. Cloudflare cf_clearance) is
+ * solved once on the first page, not re-challenged on every page.
+ */
+export async function createCaptureContext(browser: Browser): Promise<BrowserContext> {
+  return browser.newContext({
     viewport: { width: VIEWPORT_WIDTH, height: 900 },
     deviceScaleFactor: DEVICE_SCALE_FACTOR,
     userAgent: USER_AGENT,
+    locale: "en-US",
   });
+}
+
+/** If the page is a bot-challenge interstitial, wait for it to clear so we capture the real page. */
+async function waitForChallengeToClear(page: Page, url: string): Promise<void> {
+  let isChallenge = false;
+  try {
+    isChallenge = await page.evaluate((markers) => {
+      const text = `${document.title}\n${document.body ? document.body.innerText : ""}`;
+      return new RegExp(markers, "i").test(text);
+    }, CHALLENGE_MARKERS);
+  } catch {
+    return;
+  }
+  if (!isChallenge) return;
+
+  logger.warn("capture: bot-challenge detected — waiting for it to clear", { url });
+  try {
+    await page.waitForFunction(
+      (markers) => {
+        const text = `${document.title}\n${document.body ? document.body.innerText : ""}`;
+        return !new RegExp(markers, "i").test(text);
+      },
+      CHALLENGE_MARKERS,
+      { timeout: CHALLENGE_WAIT_MS, polling: 1000 },
+    );
+    await page.waitForLoadState("domcontentloaded").catch(() => undefined);
+    await page.waitForTimeout(1500); // let the real page paint after the challenge clears
+    logger.info("capture: challenge cleared", { url });
+  } catch {
+    logger.warn("capture: challenge did not clear within timeout — capturing as-is", { url });
+  }
+}
+
+export async function capturePage(context: BrowserContext, url: string): Promise<CaptureResult> {
+  const page = await context.newPage();
 
   try {
-    const page = await context.newPage();
 
     // tsx/esbuild "keepNames" wraps transpiled functions with a __name() helper; Playwright
     // serializes our evaluate functions into the page, where __name is undefined. Define a
@@ -98,6 +143,9 @@ export async function capturePage(browser: Browser, url: string): Promise<Captur
       httpStatus = resp?.status() ?? null;
       await page.waitForTimeout(SETTLE_MS);
     }
+
+    // 2b. Wait out a bot-challenge interstitial (e.g. Cloudflare) so we capture the real page.
+    await waitForChallengeToClear(page, url);
 
     // 3. Hide cookie/consent overlays and undo any scroll-lock they impose.
     await page.addStyleTag({
@@ -241,7 +289,7 @@ export async function capturePage(browser: Browser, url: string): Promise<Captur
   } catch (e) {
     throw new Error(`capturePage failed for ${url}: ${toMessage(e)}`);
   } finally {
-    // 10. Always close the context so we don't leak memory over a long run.
-    await context.close();
+    // 10. Always close the page; the context is shared across the snapshot's captures.
+    await page.close();
   }
 }
